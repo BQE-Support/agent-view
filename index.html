@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My RingCX Day</title>
+<script src="bqe-board.js"></script>
+<style>
+:root {
+  --bg: #F5F6F9; --surface: #FFFFFF; --surface-alt: #ECEFF5; --border: #DDE1EA;
+  --ink: #16213E; --ink-2: #47517A; --ink-3: #8890AC;
+  --accent: #3454D1; --accent-soft: #E7EBFB;
+  --good: #1E8A5F; --good-soft: #E4F5EC; --warning: #B8801E; --warning-soft: #FBF1DE;
+  --critical: #C23B3B; --critical-soft: #FBE7E4; --idle: #8890AC;
+  --shadow: 0 1px 2px rgba(22,33,62,0.06), 0 6px 16px rgba(22,33,62,0.06);
+  --serif: Georgia, "Iowan Old Style", "Source Serif 4", "Times New Roman", serif;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0C1220; --surface: #131A2B; --surface-alt: #1B2438; --border: #29334A;
+    --ink: #E9ECF6; --ink-2: #B0B7D1; --ink-3: #7C86A3; --accent: #7C93F5; --accent-soft: #1E2748;
+    --good: #4FC090; --good-soft: #123024; --warning: #E3AC49; --warning-soft: #34240A;
+    --critical: #E2685A; --critical-soft: #38201B; --idle: #7C86A3;
+    --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 6px 20px rgba(0,0,0,0.3);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0C1220; --surface: #131A2B; --surface-alt: #1B2438; --border: #29334A;
+  --ink: #E9ECF6; --ink-2: #B0B7D1; --ink-3: #7C86A3; --accent: #7C93F5; --accent-soft: #1E2748;
+  --good: #4FC090; --good-soft: #123024; --warning: #E3AC49; --warning-soft: #34240A;
+  --critical: #E2685A; --critical-soft: #38201B; --idle: #7C86A3;
+  --shadow: 0 1px 2px rgba(0,0,0,0.35), 0 6px 20px rgba(0,0,0,0.3);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--sans); }
+.wrap { max-width: 1600px; margin: 0 auto; padding: 20px 16px 40px; }
+.masthead { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 18px; }
+.eyebrow { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+h1 { font: 600 28px/1.15 var(--serif); margin: 4px 0 0; }
+.who { font-size: 13px; color: var(--ink-2); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.who button, .btn { border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.preview { background: var(--warning-soft); color: var(--warning); border-radius: 6px; padding: 6px 10px; font-size: 12.5px; margin-bottom: 14px; }
+.section-title { font: 600 18px var(--serif); margin: 22px 0 10px; }
+.section-title .sub { font: 12px var(--sans); color: var(--ink-3); margin-left: 6px; }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 14px 16px; }
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow); padding: 12px 14px; min-width: 0; }
+.kpi .label { font-size: 12px; color: var(--ink-3); }
+.kpi .value { font: 600 24px/1.2 var(--serif); margin-top: 2px; overflow-wrap: anywhere; }
+.kpi .note { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
+/* Layout: queues, lunch and time off pinned on the left (like the Supervisor view), everything else on the right */
+.layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 14px; align-items: start; }
+.side { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; overflow-x: hidden; }
+.side .panel { margin-bottom: 12px; padding: 12px 14px; }
+.side .section-title { font-size: 16px; margin: 0 0 8px; }
+.content { min-width: 0; }
+.content > .section-title:first-of-type { margin-top: 18px; }
+@media (max-width: 900px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; max-height: none; }
+}
+/* Queue cards (same look as the Supervisor view) */
+.queue { border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; background: var(--surface); cursor: pointer; }
+.queue:hover { border-color: var(--accent); }
+.queue.selected { outline: 2px solid var(--accent); outline-offset: 1px; }
+.queue.crit { border-color: var(--critical); background: var(--critical-soft); }
+.queue.warn { border-color: color-mix(in srgb, var(--warning) 60%, transparent); background: var(--warning-soft); }
+.queue.closed { opacity: .6; }
+.q-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.q-name { font-weight: 600; }
+.q-state { font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .05em; }
+.q-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 6px; }
+.q-stat .n { font-family: var(--serif); font-size: 17px; font-weight: 600; }
+.q-stat .l { font-size: 10px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
+.q-foot { font-size: 11.5px; color: var(--ink-2); margin-top: 4px; }
+.filter-tag { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); font: 600 12px var(--sans); }
+.filter-tag button { border: 0; background: none; color: inherit; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 0 0 2px; }
+/* Lunch and Time off lists (left column) */
+.pto-h { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3); margin: 6px 0 4px; }
+.pto-row { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.pto-row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.pto-row .when { color: var(--ink-3); font-size: 12px; text-align: right; }
+.pto-row.me { font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-weight: 600; color: var(--ink-3); font-size: 11.5px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+td { padding: 5px 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+tr.me td { background: var(--accent-soft); font-weight: 600; }
+tr.out td { color: var(--ink-3); }
+.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+.s-avail { background: var(--good); } .s-call { background: var(--critical); } .s-idle { background: var(--idle); } .s-work { background: var(--warning); } .s-out { background: transparent; border: 1px solid var(--ink-3); }
+.chip { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.chip.ok { background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+.chip.info { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.chip.muted { background: var(--surface-alt); color: var(--ink-3); }
+.muted { color: var(--ink-3); } .tiny { font-size: 12px; }
+.soon { font-size: 13px; color: var(--ink-2); }
+.signin { max-width: 440px; margin: 12vh auto 0; text-align: center; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+.signin p { color: var(--ink-2); margin: 0; }
+.signin .msg { color: var(--critical); font-size: 13px; }
+.primary-btn { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 10px 18px; font: 600 14px var(--sans); cursor: pointer; }
+.err { color: var(--critical); font-size: 13px; margin: 8px 0; }
+footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top: 30px; }
+</style>
+</head>
+<body>
+<div class="signin" id="signin" hidden>
+  <div class="eyebrow">BQE Support</div>
+  <h1>My RingCX Day</h1>
+  <p>Your queues, your status and your day. Sign in with the same RingCentral account you use for RingCX.</p>
+  <button type="button" class="primary-btn" id="signInBtn">Sign in with RingCentral</button>
+  <div class="msg" id="signinMsg"></div>
+</div>
+
+<div class="wrap" id="app" hidden>
+  <div class="masthead">
+    <div>
+      <div class="eyebrow">BQE Support · RingCX</div>
+      <h1>My RingCX Day</h1>
+    </div>
+    <div class="who"><span id="whoName"></span><span class="muted tiny" id="asOf"></span><button type="button" id="signOutBtn">Sign out</button></div>
+  </div>
+  <div class="preview" id="preview" hidden></div>
+  <div class="err" id="err" hidden></div>
+
+  <div class="layout">
+    <aside class="side">
+      <div class="panel">
+        <div class="section-title">My queues <span class="sub">click one to filter</span></div>
+        <div id="queueList" class="tiny muted">Loading…</div>
+      </div>
+      <div class="panel">
+        <div class="section-title">Lunch <span class="sub">your queues</span></div>
+        <div id="lunchList" class="tiny muted">Loading…</div>
+      </div>
+      <div class="panel">
+        <div class="section-title">Time off <span class="sub">your queues, next 7 days</span></div>
+        <div id="ptoList" class="tiny muted">Loading…</div>
+      </div>
+    </aside>
+
+    <div class="content">
+      <div class="kpi-grid" id="kpis"></div>
+
+      <div class="section-title"><span id="agentsTitle">Agents in my queues</span> <span id="filterTag"></span></div>
+      <div class="panel"><div id="agents" class="muted">Loading…</div></div>
+
+      <div class="section-title">My day <span class="sub">every status since your first login today</span></div>
+      <div class="panel"><div id="day" class="muted">Loading…</div></div>
+
+      <div class="section-title">Coming next</div>
+      <div class="panel soon">Your scorecard (how each part is calculated), call recordings and your last 7 days will be added here.</div>
+    </div>
+  </div>
+
+  <footer>BQE Software · Internal · Version 0.2</footer>
+</div>
+
+<script>
+(function () {
+  var POLL_MS = 60000, DAY_MS = 5 * 60000;
+  var state = { data: null, gotAt: 0, day: null, pollTimer: null, dayTimer: null };
+  // Admin preview (?as=<agentId>). The RingCentral sign-in redirect drops the query, so keep it for that round trip.
+  var qs = new URLSearchParams(location.search), asParam = qs.get("as");
+  try {
+    if (asParam) sessionStorage.setItem("agentView.as", asParam);
+    else if (qs.get("code")) asParam = sessionStorage.getItem("agentView.as");
+    else sessionStorage.removeItem("agentView.as");
+  } catch (e) {}
+  function $(id) { return document.getElementById(id); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function dur(sec) {
+    sec = Math.max(0, Math.round(sec || 0));
+    var h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+    return h ? h + "h " + String(m).padStart(2, "0") + "m" : m ? m + "m " + String(s).padStart(2, "0") + "s" : s + "s";
+  }
+  function clock(iso) { return new Date(iso).toLocaleTimeString("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" }) + " PT"; }
+  // RingCX loginDts is Pacific time with no offset.
+  function pacificClock(dts) { var m = /T(\d\d):(\d\d)/.exec(dts || ""); if (!m) return "–"; var h = +m[1]; return (h % 12 || 12) + ":" + m[2] + (h < 12 ? " AM" : " PM") + " PT"; }
+  function title(s) { return String(s || "").toLowerCase().replace(/(^|[\s/-])([a-z])/g, function (x, a, b) { return a + b.toUpperCase(); }).replace(/\b(Zd|Es|Os|Core|Rna)\b/g, function (w) { return w.toUpperCase(); }); }
+  // Status name and color, by RingCX base state (same colors as the RingCX agent app).
+  function statusOf(state, base) {
+    var b = String(base || "").toUpperCase();
+    if (b === "AVAILABLE") return { cls: "s-avail", label: state && String(state).toUpperCase() !== "AVAILABLE" ? state : "Available" };
+    if (b === "ENGAGED" || b === "ONCALL") return { cls: "s-call", label: "Engaged" };
+    if (b === "TRANSITION") return { cls: "s-call", label: "Wrap-up" };
+    if (b === "LUNCH" || b === "ON-BREAK" || b === "AWAY" || b === "BREAK") return { cls: "s-idle", label: title(state || b) };
+    if (!b) return { cls: "s-out", label: "Logged out" };
+    if (String(state).toUpperCase() === "WORKING") return { cls: "s-work", label: "Lost Connection" };
+    return { cls: "s-work", label: title(state || b) };
+  }
+  function ago() { return state.gotAt ? (Date.now() - state.gotAt) / 1000 : 0; }
+
+  function render() {
+    var d = state.data; if (!d) return;
+    var me = d.me || {};
+    $("whoName").textContent = d.viewer.name;
+    $("asOf").textContent = d.ts ? "Updated " + clock(d.ts) : "";
+    if (d.viewer.previewOf) { $("preview").hidden = false; $("preview").textContent = "Admin preview: showing the board as agent " + d.viewer.previewOf + (me.name ? " (" + me.name + ")" : "") + "."; }
+    var st = me.loggedIn ? statusOf(me.state, me.base) : statusOf(null, null);
+    var tiles = [
+      { label: "My status", value: "<span class='dot " + st.cls + "'></span>" + esc(st.label), note: me.loggedIn ? "for " + dur(me.stateSec + ago()) : "Not logged in to RingCX" },
+      { label: "Logged in since", value: me.loggedIn ? esc(pacificClock(me.loginDts)) : "–", note: me.loggedIn ? "this session " + dur(me.sessionSec + ago()) : "" },
+      { label: "Logged in today", value: me.loggedIn ? dur(me.dayLoginSec + ago()) : "–", note: "all sessions" },
+      { label: "Calls answered", value: me.loggedIn ? esc(me.calls) : "–", note: me.loggedIn ? "talk " + dur(me.talkSec) : "" },
+      { label: "RNA", value: me.loggedIn ? esc(me.rna) : "–", note: "rang, not answered" }
+    ];
+    $("kpis").innerHTML = tiles.map(function (t) {
+      return "<div class='kpi'><div class='label'>" + t.label + "</div><div class='value'>" + t.value + "</div><div class='note'>" + esc(t.note) + "</div></div>";
+    }).join("");
+
+    renderQueues(d, me);
+    renderAgents(d, me);
+    renderLunch(d, me);
+    renderPto(d);
+  }
+
+  // ---- Left column: queue cards. Clicking one filters the Agents table to that queue (click again to clear). ----
+  var queueFilter = null;   // gateId
+  function pct(a, b) { return b ? Math.round(100 * a / b) + "%" : "–"; }
+  function renderQueues(d, me) {
+    if (queueFilter && !d.queues.some(function (q) { return q.gateId === queueFilter; })) queueFilter = null;
+    $("queueList").className = "";
+    $("queueList").innerHTML = d.queues.length ? d.queues.map(function (q) {
+      var noOne = q.open && !q.available;
+      var cls = noOne ? (q.waiting ? "crit" : "warn") : (q.waiting ? "warn" : "");
+      if (!q.open) cls += " closed";
+      if (queueFilter === q.gateId) cls += " selected";
+      var mine = q.myPos === 1 ? "<span class='chip ok'>You're next in line</span>"
+        : q.myPos ? "<span class='chip info'>You're #" + q.myPos + " in line</span>"
+        : me.loggedIn && String(me.base).toUpperCase() === "AVAILABLE" && q.open ? "<span class='chip muted'>Not taking this queue</span>" : "";
+      return "<div class='queue " + cls + "' data-queue='" + esc(q.gateId) + "' title='" + (queueFilter === q.gateId ? "Click to show all your queues" : "Click to show only this queue") + "'>" +
+        "<div class='q-head'><span class='q-name'>" + esc(q.name) + "</span><span class='q-state'>" + (q.open ? "Open" : "Closed") + "</span></div>" +
+        (q.hours ? "<div class='tiny muted'>Hours " + esc(q.hours) + "</div>" : "") +
+        "<div class='q-stats'>" +
+          "<div class='q-stat'><div class='n'>" + q.waiting + "</div><div class='l'>Waiting</div></div>" +
+          "<div class='q-stat'><div class='n'>" + (q.waiting ? dur(q.longestWaitSec + ago()) : "–") + "</div><div class='l'>Longest</div></div>" +
+          "<div class='q-stat'><div class='n'>" + q.available + "/" + q.loggedIn + "</div><div class='l'>Avail/in</div></div>" +
+          "<div class='q-stat'><div class='n'>" + pct(q.slaPass, q.slaPass + q.slaFail) + "</div><div class='l'>SLA</div></div>" +
+        "</div>" +
+        "<div class='q-foot'>" + q.presented + " presented · " + q.answered + " answered · " + q.abandoned + " abandoned</div>" +
+        (mine ? "<div style='margin-top:5px'>" + mine + "</div>" : "") +
+        "</div>";
+    }).join("") : "<div class='muted'>You aren't assigned to any queue in RingCX.</div>";
+  }
+
+  // ---- Agents: one list for all your queues, or one queue in line order when a queue is picked. ----
+  function group(a) {
+    var b = String(a.base || "").toUpperCase();
+    return b === "AVAILABLE" ? 0 : (b === "ENGAGED" || b === "ONCALL" || b === "TRANSITION") ? 1 : (b === "LUNCH" || b === "ON-BREAK" || b === "AWAY" || b === "BREAK") ? 3 : 2;
+  }
+  function renderAgents(d, me) {
+    var qName = {}; d.queues.forEach(function (q) { qName[q.gateId] = q.name; });
+    var q = queueFilter, list = (d.agents || []).filter(function (a) { return !q || a.gates.indexOf(q) >= 0; });
+    $("agentsTitle").textContent = q ? "Agents in " + qName[q] : "Agents in my queues";
+    $("filterTag").innerHTML = q ? "<span class='filter-tag'>Line order for " + esc(qName[q]) + " <button type='button' data-clear title='Show all your queues'>×</button></span>" : "";
+    list.sort(q ? function (a, b) { return ((a.pos[q] || 999) - (b.pos[q] || 999)) || (group(a) - group(b)) || a.name.localeCompare(b.name); }
+      : function (a, b) { return (group(a) - group(b)) || (b.stateSec - a.stateSec) || a.name.localeCompare(b.name); });
+    if (!list.length) { $("agents").className = "muted"; $("agents").textContent = "Nobody in " + (q ? "this queue" : "your queues") + " is logged in."; return; }
+    var rows = list.map(function (a) {
+      var s = statusOf(a.state, a.base), isMe = a.id === me.id, last;
+      if (q) {
+        var n = a.pos[q];
+        last = n === 1 ? "<span class='chip ok'>Next in line</span>" : n ? "<span class='chip info'>#" + n + " in line</span>"
+          : group(a) === 0 ? "<span class='chip muted'>Not taking " + esc(qName[q]) + "</span>" : "";
+      } else last = d.queues.filter(function (x) { return a.gates.indexOf(x.gateId) >= 0; }).map(function (x) { return esc(x.name); }).join(", ");
+      return "<tr class='" + (isMe ? "me" : "") + "'><td>" + esc(a.name) + (isMe ? " (you)" : "") + "</td><td><span class='dot " + s.cls + "'></span>" + esc(s.label) +
+        "</td><td class='num'>" + dur(a.stateSec + ago()) + "</td><td" + (q ? " class='num'" : "") + ">" + last + "</td></tr>";
+    }).join("");
+    $("agents").className = "";
+    $("agents").innerHTML = "<table><thead><tr><th>Agent</th><th>Status</th><th class='num'>In status</th><th" + (q ? " class='num'>Line" : ">Queues") + "</th></tr></thead><tbody>" + rows + "</tbody></table>" +
+      (q ? "<div class='tiny muted' style='margin-top:6px'>RingCX offers this queue's next call to Available agents logged in to it: highest rank first, then whoever has been Available longest.</div>" : "");
+  }
+
+  // ---- Left column: lunch (people in your queues) ----
+  function clockOf(min) { var h = Math.floor(min / 60), m = min % 60; return ((h % 12) || 12) + ":" + String(m).padStart(2, "0") + (h >= 12 ? " PM" : " AM"); }
+  function row(name, right, isMe) { return "<div class='pto-row" + (isMe ? " me" : "") + "'><span>" + esc(name) + (isMe ? " (you)" : "") + "</span><span class='when'>" + right + "</span></div>"; }
+  function renderLunch(d, me) {
+    var L = d.lunch, el = $("lunchList");
+    if (!L) { el.textContent = d.sheetError ? "Couldn't load the schedule: " + d.sheetError : "No schedule."; return; }
+    var mine = L.mine && L.mine.lunch !== null ? "Your lunch: <b>" + clockOf(L.mine.lunch) + "</b>" + (L.mine.works ? "" : " (not a scheduled workday)") : "No lunch time on the roster for you.";
+    el.className = "";
+    el.innerHTML = "<div style='font-size:13px;margin-bottom:4px'>" + mine + "</div>" +
+      "<div class='pto-h'>At lunch now</div>" + (L.atLunch.map(function (x) {
+        return row(x.name, dur(x.sec + ago()) + (x.sched !== null ? " · sched " + clockOf(x.sched) : ""), x.name === me.name);
+      }).join("") || "<div class='muted tiny'>Nobody.</div>") +
+      "<div class='pto-h'>Next up (" + (L.lookaheadMin / 60) + "h)</div>" + (L.next.map(function (x) {
+        return row(x.name, clockOf(x.at), x.name === me.name);
+      }).join("") || "<div class='muted tiny'>Nobody scheduled.</div>");
+  }
+
+  // ---- Left column: time off (people in your queues) ----
+  function ymdLabel(ymd) { return new Date(ymd + "T12:00:00Z").toLocaleDateString("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }); }
+  function renderPto(d) {
+    var P = d.pto, el = $("ptoList");
+    if (!P) { el.textContent = d.sheetError ? "Couldn't load time off: " + d.sheetError : "No time off data."; return; }
+    var today = P.today, out = P.rows.filter(function (r) { return r.start <= today && r.end >= today; }), soon = P.rows.filter(function (r) { return r.start > today; });
+    function item(r, isToday) {
+      var when = isToday ? (r.end > today ? "through " + ymdLabel(r.end) : "today") : (r.start === r.end ? ymdLabel(r.start) : ymdLabel(r.start) + " – " + ymdLabel(r.end));
+      return "<div class='pto-row'><span>" + esc(r.name) + " <span class='muted tiny'>" + esc(r.type || "") + (r.hours ? " · " + esc(r.hours) + "h" : "") + "</span></span><span class='when'>" + esc(when) + "</span></div>";
+    }
+    el.className = "";
+    el.innerHTML = "<div class='pto-h'>Out today</div>" + (out.map(function (r) { return item(r, true); }).join("") || "<div class='muted tiny'>Nobody.</div>") +
+      "<div class='pto-h'>Coming up</div>" + (soon.map(function (r) { return item(r, false); }).join("") || "<div class='muted tiny'>Nothing scheduled.</div>");
+  }
+
+  document.addEventListener("click", function (e) {
+    var card = e.target.closest && e.target.closest("[data-queue]");
+    if (card) { var g = card.getAttribute("data-queue"); queueFilter = queueFilter === g ? null : g; render(); return; }
+    if (e.target.closest && e.target.closest("[data-clear]")) { queueFilter = null; render(); }
+  });
+
+  function renderDay() {
+    var d = state.day;
+    if (!d) return;
+    if (!d.runs.length) { $("day").innerHTML = "<span class='muted'>No login seen yet today.</span>"; return; }
+    var rows = d.runs.slice().reverse().map(function (r, i) {
+      var s = statusOf(r.state, r.base), now = i === 0;
+      var secs = (Date.parse(r.to) - Date.parse(r.from)) / 1000 + 60;   // snapshots are a minute apart
+      return "<tr class='" + (r.state === null ? "out" : "") + "'><td class='num'>" + clock(r.from) + "</td><td><span class='dot " + s.cls + "'></span>" + esc(s.label) +
+        (now && r.state !== null ? " <span class='chip info'>now</span>" : "") + "</td><td class='num'>" + dur(secs) + "</td></tr>";
+    }).join("");
+    $("day").className = "";
+    $("day").innerHTML = "<div class='tiny muted' style='margin-bottom:6px'>First login seen today: " + esc(pacificClock(d.firstLoginDts)) +
+      ". Times are to the nearest minute (RingCX is checked once a minute).</div><table><thead><tr><th class='num'>Started</th><th>Status</th><th class='num'>How long</th></tr></thead><tbody>" + rows + "</tbody></table>";
+  }
+
+  function fn(part) {
+    var q = []; if (part) q.push("part=" + part); if (asParam) q.push("as=" + encodeURIComponent(asParam));
+    return "agent-view" + (q.length ? "?" + q.join("&") : "");
+  }
+  function showErr(e) { $("err").hidden = !e; $("err").textContent = e ? String(e.message || e) : ""; }
+  async function poll() {
+    try { state.data = await BQEBoard.api(fn()); state.gotAt = Date.now(); showErr(null); render(); }
+    catch (e) { showErr(e); }
+  }
+  async function pollDay() {
+    try { var j = await BQEBoard.api(fn("day")); state.day = j.day; renderDay(); } catch (e) { showErr(e); }
+  }
+  function startPolling() {
+    stopPolling(); poll(); pollDay();
+    state.pollTimer = setInterval(poll, POLL_MS);
+    state.dayTimer = setInterval(pollDay, DAY_MS);
+  }
+  function stopPolling() { clearInterval(state.pollTimer); clearInterval(state.dayTimer); }
+  setInterval(function () { if (!document.hidden) render(); }, 1000);
+  // Pauses while the tab is hidden, so a background tab costs nothing.
+  document.addEventListener("visibilitychange", function () { if (document.hidden) stopPolling(); else if (!$("app").hidden) startPolling(); });
+
+  function showSignin(msg) { stopPolling(); $("app").hidden = true; $("signin").hidden = false; $("signinMsg").textContent = msg || ""; }
+  $("signInBtn").addEventListener("click", function () { $("signinMsg").textContent = ""; BQEBoard.signIn().catch(function (e) { showSignin(e.message); }); });
+  $("signOutBtn").addEventListener("click", function () { BQEBoard.signOut(); });
+  BQEBoard.start({
+    board: "agent-view",
+    onSignIn: showSignin,
+    onReady: function () { $("signin").hidden = true; $("app").hidden = false; startPolling(); }
+  });
+})();
+</script>
+</body>
+</html>
