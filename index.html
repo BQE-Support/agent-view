@@ -351,7 +351,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     rows = rows.sort(function (x, y) { return y.t - x.t; }).map(function (x) { return x.html; }).join("");
     $("day").className = "";
     $("day").innerHTML = "<div class='tiny muted' style='margin-bottom:6px'>First login seen today: " + esc(pacificClock(d.firstLoginDts)) +
-      ". Times are to the nearest minute (RingCX is checked once a minute). RNA lines are rings you didn't answer; one RingCX dropped itself while it rang is not counted.</div><table><thead><tr><th class='num'>Started</th><th>Status</th><th class='num'>How long</th></tr></thead><tbody>" + rows + "</tbody></table>";
+      ". Times are to the nearest minute (RingCX is checked once a minute).</div><table><thead><tr><th class='num'>Started</th><th>Status</th><th class='num'>How long</th></tr></thead><tbody>" + rows + "</tbody></table>";
   }
 
   function fn(part) {
