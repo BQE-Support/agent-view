@@ -101,6 +101,9 @@ tr.out td { color: var(--ink-3); }
 .kpi.flash { animation: kpiFlash 1.2s ease-in-out infinite; border-color: var(--critical); }
 @keyframes kpiFlash { 50% { background: var(--critical-soft); box-shadow: 0 0 0 2px var(--critical); } }
 @media (prefers-reduced-motion: reduce) { .kpi.flash { animation: none; background: var(--critical-soft); } }
+.chip.miss { background: var(--critical-soft); color: var(--critical); font-weight: 600; }
+.act-btn { border: 1px solid var(--border); background: var(--surface); color: var(--ink-2); border-radius: 6px; font: 12px var(--sans); padding: 2px 8px; cursor: pointer; white-space: nowrap; }
+tr.act-row td { background: var(--surface-2, transparent); }
 tr.rna td { background: color-mix(in srgb, var(--critical) 8%, transparent); }
 tr.rna.free td { background: none; color: var(--ink-3); }
 .chip { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
@@ -169,7 +172,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     </div>
   </div>
 
-  <footer>BQE Software · Internal · Version 0.6 Beta</footer>
+  <footer>BQE Software · Internal · Version 0.7 Beta</footer>
 </div>
 
 <script>
@@ -285,7 +288,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
         last = n === 1 ? "<span class='chip ok'>Next in line</span>" : n ? "<span class='chip info'>#" + n + " in line</span>"
           : group(a) === 0 ? "<span class='chip muted'>Not taking " + esc(qName[q]) + "</span>" : "";
       } else last = d.queues.filter(function (x) { return a.gates.indexOf(x.gateId) >= 0; }).map(function (x) { return esc(x.name); }).join(", ");
-      return "<tr class='" + (isMe ? "me" : "") + "'><td>" + esc(a.name) + (isMe ? " (you)" : "") + "</td><td><span class='dot " + s.cls + "'></span>" + esc(s.label) +
+      return "<tr class='" + (isMe ? "me" : "") + "'><td>" + esc(a.name) + (isMe ? " (you)" : "") + (a.missed ? " <span class='chip miss'>missed last call</span>" : "") + "</td><td><span class='dot " + s.cls + "'></span>" + esc(s.label) +
         "</td><td class='num'>" + dur(a.stateSec + ago()) + "</td><td class='num'>" + (a.rna == null ? "–" : rnaCell(a.rna)) + "</td><td" + (q ? " class='num'" : "") + ">" + last + "</td></tr>";
     }).join("");
     $("agents").className = "";
@@ -331,27 +334,71 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     if (e.target.closest && e.target.closest("[data-clear]")) { queueFilter = null; render(); }
   });
 
+  // ---- My Day: Zendesk / Jira work during each status (the "activity" function, your own work only) ----
+  // A finished status is asked once; the current one again every 2 minutes while it's open.
+  var act = { open: {}, cache: {} };
+  async function loadAct(from, to, live) {
+    var c = act.cache[from];
+    if (c && (c.loading || Date.now() - c.at < (c.err ? 60000 : live ? 2 * 60000 : Infinity))) return;   // an error waits a minute
+    act.cache[from] = { loading: true, at: Date.now(), data: c && c.data };
+    try {
+      var who = state.data && state.data.me && state.data.me.name ? "&name=" + encodeURIComponent(state.data.me.name) : "";
+      var j = await BQEBoard.api("activity?from=" + Math.round(from) + "&to=" + Math.round(to) + who);
+      act.cache[from] = { at: Date.now(), data: j };
+    } catch (e) { act.cache[from] = { at: Date.now(), err: e.message || String(e), data: c && c.data }; }
+    renderDay();
+  }
+  function actHtml(from, to, live) {
+    loadAct(from, to, live);
+    var c = act.cache[from];
+    if (!c || (!c.data && c.loading)) return "<span class='muted'>Looking in Zendesk and Jira…</span>";
+    if (!c.data) return "<span class='muted'>Couldn't load: " + esc(c.err || "?") + "</span>";
+    var d = c.data, out = [];
+    function acts(list) { return list.map(function (a) { return "<div class='tiny'><span class='muted'>" + clock(new Date(a.t).toISOString()) + "</span> " + esc(a.text) + "</div>"; }).join(""); }
+    if (d.zendesk && d.zendesk.error) out.push("<div class='tiny muted'>Zendesk: " + esc(d.zendesk.error) + "</div>");
+    ((d.zendesk && d.zendesk.tickets) || []).forEach(function (t) {
+      out.push("<div style='margin:4px 0'><a href='https://bqe.zendesk.com/agent/tickets/" + t.id + "' target='_blank' rel='noopener'>#" + t.id + "</a> " + esc(t.subject) + acts(t.actions) + "</div>");
+    });
+    if (d.jira && d.jira.error) out.push("<div class='tiny muted'>Jira: " + esc(d.jira.error) + "</div>");
+    ((d.jira && d.jira.issues) || []).forEach(function (i) {
+      out.push("<div style='margin:4px 0'><a href='https://bqetrack.atlassian.net/browse/" + esc(i.key) + "' target='_blank' rel='noopener'>" + esc(i.key) + "</a> " + esc(i.summary) + acts(i.actions) + "</div>");
+    });
+    return out.join("") || "<span class='muted'>Nothing in Zendesk or Jira.</span>";
+  }
+  $("day").addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest(".act-btn");
+    if (!b) return;
+    var from = +b.getAttribute("data-act-from");
+    if (act.open[from]) delete act.open[from]; else act.open[from] = true;
+    renderDay();
+  });
+
   function renderDay() {
     var d = state.day;
     if (!d) return;
     if (!d.runs.length) { $("day").innerHTML = "<span class='muted'>No login seen yet today.</span>"; return; }
-    var rows = d.runs.slice().reverse().map(function (r, i) {
+    var runs = d.runs.slice().reverse();
+    var rows = runs.map(function (r, i) {
       var s = statusOf(r.state, r.base), now = i === 0;
       var secs = (Date.parse(r.to) - Date.parse(r.from)) / 1000 + 60;   // snapshots are a minute apart
-      return { t: Date.parse(r.from), html: "<tr class='" + (r.state === null ? "out" : "") + "'><td class='num'>" + clock(r.from) + "</td><td><span class='dot " + s.cls + "'></span>" + esc(s.label) +
-        (now && r.state !== null ? " <span class='chip info'>now</span>" : "") + "</td><td class='num'>" + dur(secs) + "</td></tr>" };
+      // Activity window: until the next status started (the current one: until now).
+      var from = Date.parse(r.from), to = now ? Date.now() : Date.parse(runs[i - 1].from), live = now && r.state !== null;
+      return { t: from, html: "<tr class='" + (r.state === null ? "out" : "") + "'><td class='num'>" + clock(r.from) + "</td><td><span class='dot " + s.cls + "'></span>" + esc(s.label) +
+        (now && r.state !== null ? " <span class='chip info'>now</span>" : "") + "</td><td class='num'>" + dur(secs) + "</td><td>" +
+        "<button type='button' class='act-btn' data-act-from='" + from + "' data-act-to='" + Math.round(to) + "' data-act-live='" + (live ? 1 : 0) + "'>" + (act.open[from] ? "▾" : "▸") + " Activity</button></td></tr>" +
+        (act.open[from] ? "<tr class='act-row'><td></td><td colspan='3'>" + actHtml(from, to, live) + "</td></tr>" : "") };
     });
     // Each RNA as its own line (live view v5.82). A ring RingCX dropped itself is shown but not counted.
     (d.rings || []).forEach(function (g) {
       var bits = [g.queue, g.from ? "from " + g.from : "", g.what].filter(Boolean).join(" · ");
       rows.push({ t: Date.parse(g.t), html: "<tr class='rna" + (g.counted ? "" : " free") + "'><td class='num'>" + clock(g.t) + "</td><td><b>RNA</b>: rang, not answered " +
         (g.counted ? "<span class='chip' style='background:var(--critical-soft);color:var(--critical)'>counted</span>" : "<span class='chip info'>not counted</span>") +
-        (bits ? "<div class='tiny muted'>" + esc(bits) + "</div>" : "") + "</td><td class='num' title='How long it rang (known when the call ended while ringing)'>" + (g.sec != null ? dur(g.sec) : "–") + "</td></tr>" });
+        (bits ? "<div class='tiny muted'>" + esc(bits) + "</div>" : "") + "</td><td class='num' title='How long it rang (known when the call ended while ringing)'>" + (g.sec != null ? dur(g.sec) : "–") + "</td><td></td></tr>" });
     });
     rows = rows.sort(function (x, y) { return y.t - x.t; }).map(function (x) { return x.html; }).join("");
     $("day").className = "";
     $("day").innerHTML = "<div class='tiny muted' style='margin-bottom:6px'>First login seen today: " + esc(pacificClock(d.firstLoginDts)) +
-      ". Times are to the nearest minute (RingCX is checked once a minute).</div><table><thead><tr><th class='num'>Started</th><th>Status</th><th class='num'>How long</th></tr></thead><tbody>" + rows + "</tbody></table>";
+      ". Times are to the nearest minute (RingCX is checked once a minute).</div><table><thead><tr><th class='num'>Started</th><th>Status</th><th class='num'>How long</th><th></th></tr></thead><tbody>" + rows + "</tbody></table>";
   }
 
   function fn(part) {
