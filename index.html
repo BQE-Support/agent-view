@@ -162,7 +162,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     </div>
   </div>
 
-  <footer>BQE Software · Internal · Version 0.4 Beta</footer>
+  <footer>BQE Software · Internal · Version 0.5 Beta</footer>
 </div>
 
 <script>
@@ -274,10 +274,10 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
           : group(a) === 0 ? "<span class='chip muted'>Not taking " + esc(qName[q]) + "</span>" : "";
       } else last = d.queues.filter(function (x) { return a.gates.indexOf(x.gateId) >= 0; }).map(function (x) { return esc(x.name); }).join(", ");
       return "<tr class='" + (isMe ? "me" : "") + "'><td>" + esc(a.name) + (isMe ? " (you)" : "") + "</td><td><span class='dot " + s.cls + "'></span>" + esc(s.label) +
-        "</td><td class='num'>" + dur(a.stateSec + ago()) + "</td><td" + (q ? " class='num'" : "") + ">" + last + "</td></tr>";
+        "</td><td class='num'>" + dur(a.stateSec + ago()) + "</td><td class='num'>" + (a.rna == null ? "–" : esc(a.rna)) + "</td><td" + (q ? " class='num'" : "") + ">" + last + "</td></tr>";
     }).join("");
     $("agents").className = "";
-    $("agents").innerHTML = "<table><thead><tr><th>Agent</th><th>Status</th><th class='num'>In status</th><th" + (q ? " class='num'>Line" : ">Queues") + "</th></tr></thead><tbody>" + rows + "</tbody></table>" +
+    $("agents").innerHTML = "<table><thead><tr><th>Agent</th><th>Status</th><th class='num'>In status</th><th class='num' title='Rang, not answered (today)'>RNA</th><th" + (q ? " class='num'>Line" : ">Queues") + "</th></tr></thead><tbody>" + rows + "</tbody></table>" +
       (q ? "<div class='tiny muted' style='margin-top:6px'>RingCX offers this queue's next call to Available agents logged in to it: highest rank first, then whoever has been Available longest.</div>" : "");
   }
 
