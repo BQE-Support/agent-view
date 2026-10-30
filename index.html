@@ -162,8 +162,10 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
       <div class="section-title"><span id="agentsTitle">Agents in my queues</span> <span id="filterTag"></span></div>
       <div class="panel"><div id="agents" class="muted">Loading…</div></div>
 
-      <div class="section-title">My scorecard <span class="sub" id="scoreAsOf"></span></div>
-      <div class="panel"><div id="score" class="muted">Loading…</div></div>
+      <div class="section-title">Tickets waiting on me <span class="sub" id="tkSub"></span></div>
+      <div class="panel"><div id="tickets" class="muted">Loading…</div>
+        <div class="tiny muted" style="margin-top:6px">Zendesk tickets assigned to you that are Open, or On Hold with no due date (or a due date that has passed), and ES tickets in Awaiting info or Resolved to L1. Each one is due by the end of your next shift after it started waiting on you. An ES ticket you commented on or moved in Jira that day isn't late. Checked every 10 minutes.</div>
+      </div>
 
       <details class="collapsible">
         <summary class="section-title">My day <span class="sub">every status since your first login today</span></summary>
@@ -175,7 +177,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     </div>
   </div>
 
-  <footer>BQE Software · Internal · Version 0.8 Beta</footer>
+  <footer>BQE Software · Internal · Version 0.9 Beta</footer>
 </div>
 
 <script>
@@ -415,19 +417,33 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
   }
   async function pollDay() {
     try { var j = await BQEBoard.api(fn("day")); state.day = j.day; renderDay(); } catch (e) { showErr(e); }
-    try { var k = await BQEBoard.api(fn("score")); renderScore(k.score); } catch (e) { showErr(e); }
+    try { var k = await BQEBoard.api(fn("tickets")); renderTickets(k.tickets); } catch (e) { showErr(e); }
   }
-  // ---- My scorecard: their own row of the supervisors' Performance today, same columns and colors, no rank ----
-  function renderScore(sc) {
-    $("scoreAsOf").textContent = sc && sc.asOf ? "as of " + clock(sc.asOf) : "";
-    if (!sc || !sc.cells) { $("score").className = "muted"; $("score").textContent = "Not scored yet today."; return; }
-    $("score").className = "";
-    $("score").innerHTML = "<div style='overflow-x:auto'><table><thead><tr>" + sc.cols.map(function (c) { return "<th class='num'>" + esc(c) + "</th>"; }).join("") +
-      "</tr></thead><tbody><tr>" + sc.cells.map(function (c) {
-        return "<td class='num'" + (c.tip ? " title='" + esc(c.tip) + "'" : "") + ">" + (c.s || []).map(function (x) {
-          return x.c ? "<span class='" + esc(x.c) + "'>" + esc(x.t) + "</span>" : esc(x.t);
-        }).join("") + "</td>";
-      }).join("") + "</tr></tbody></table></div>" + (sc.cells[0] && sc.cells[0].tip ? "<div class='tiny muted' style='margin-top:6px'>" + esc(sc.cells[0].tip) + "</div>" : "");
+  // ---- Tickets waiting on me (2026-10-30; replaces My scorecard for now): the same list supervisors open from the
+  // Tickets cell, as their board last saved it. Rows: [src, id, state, waiting since, deadline, result, subject].
+  var TK_RESULT = {
+    late: ["hot", "late, still waiting"], late2: ["hot", "2+ days late, still waiting"], handledlate: ["warmn", "handled late"],
+    handled: ["good", "handled in time"], worked: ["good", "worked that day (not late)"], onhold: ["muted", "On Hold, not counted yet"]
+  };
+  function whenLabel(ms) {
+    var ymd = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles" }).format(new Date(ms));
+    return ymdLabel(ymd) + " " + clock(ms);
+  }
+  function renderTickets(tk) {
+    var rows = tk && tk.rows;
+    if (!rows) { $("tkSub").textContent = ""; $("tickets").className = "muted"; $("tickets").textContent = "Not loaded yet today. It fills in once a supervisor's board has checked your tickets."; return; }
+    var late = rows.filter(function (x) { return /^late/.test(x[5]) || x[5] === "handledlate"; }).length, waiting = rows.filter(function (x) { return x[5] !== "handled" && x[5] !== "handledlate"; }).length;
+    $("tkSub").textContent = late + " past deadline · " + waiting + " waiting now" + (tk.asOf ? " · as of " + clock(tk.asOf) : "");
+    if (!rows.length) { $("tickets").className = "muted"; $("tickets").textContent = "Nothing waiting on you."; return; }
+    var zd = "https://bqe.zendesk.com/agent/tickets/", es = "https://bqetrack.atlassian.net/browse/";
+    $("tickets").className = "";
+    $("tickets").innerHTML = "<div style='overflow-x:auto'><table><thead><tr><th>Ticket</th><th>State</th><th>Waiting since</th><th>Deadline (end of next shift)</th><th>Result</th><th>Subject</th></tr></thead><tbody>" +
+      rows.map(function (x) {
+        var r = TK_RESULT[x[5]], dl = x[4];
+        var res = r ? "<span class='" + r[0] + "'>" + esc(r[1]) + "</span>" : (x[5] === "due" ? "<span class='muted'>due " + esc(clock(dl)) + "</span>" : "");
+        return "<tr><td><a href='" + (x[0] === "es" ? es : zd) + esc(x[1]) + "' target='_blank' rel='noopener'>" + (x[0] === "es" ? esc(x[1]) : "#" + esc(x[1])) + " ↗</a></td>" +
+          "<td>" + esc(x[2]) + "</td><td>" + esc(whenLabel(x[3])) + "</td><td>" + esc(whenLabel(dl)) + "</td><td>" + res + "</td><td style='white-space:normal'>" + esc(x[6]) + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
   }
   function startPolling() {
     stopPolling(); poll(); pollDay();
