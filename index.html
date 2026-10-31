@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>My RingCX Day</title>
+<title>My Workday</title>
 <script src="bqe-board.js"></script>
 <style>
 :root {
@@ -123,7 +123,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
 <body>
 <div class="signin" id="signin" hidden>
   <div class="eyebrow">BQE Support</div>
-  <h1>My RingCX Day</h1>
+  <h1>My Workday</h1>
   <p>Your queues, your status and your day. Sign in with the same RingCentral account you use for RingCX.</p>
   <button type="button" class="primary-btn" id="signInBtn">Sign in with RingCentral</button>
   <div class="msg" id="signinMsg"></div>
@@ -133,7 +133,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
   <div class="masthead">
     <div>
       <div class="eyebrow">BQE Support · RingCX</div>
-      <h1>My RingCX Day</h1>
+      <h1>My Workday</h1>
     </div>
     <div class="who"><span id="whoName"></span><span class="muted tiny" id="asOf"></span><button type="button" id="signOutBtn">Sign out</button></div>
   </div>
@@ -165,20 +165,22 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
       <div class="section-title">My scorecard <span class="sub" id="scoreAsOf"></span></div>
       <div class="panel"><div id="score" class="muted">Loading…</div></div>
 
-      <div class="section-title">Tickets waiting on me <span class="sub" id="tkSub"></span></div>
-      <div class="panel"><div id="tickets" class="muted">Loading…</div></div>
+      <details class="collapsible" open>
+        <summary class="section-title">Tickets waiting on me <span class="sub" id="tkSub"></span></summary>
+        <div class="panel"><div id="tickets" class="muted">Loading…</div></div>
+      </details>
 
       <details class="collapsible">
-        <summary class="section-title">My day <span class="sub">every status since your first login today</span></summary>
+        <summary class="section-title">My Statuses <span class="sub">every status since your first login today</span></summary>
         <div class="panel"><div id="day" class="muted">Loading…</div></div>
       </details>
 
-      <div class="section-title">Coming next</div>
-      <div class="panel soon">Call recordings and your last 7 days will be added here.</div>
+      <div class="section-title">My last 7 days</div>
+      <div class="panel"><div id="week" class="muted">Loading…</div></div>
     </div>
   </div>
 
-  <footer>BQE Software · Internal · Version 1.0 Beta</footer>
+  <footer>BQE Software · Internal · Version 1.2 Beta</footer>
 </div>
 
 <script>
@@ -420,6 +422,50 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     try { var j = await BQEBoard.api(fn("day")); state.day = j.day; renderDay(); } catch (e) { showErr(e); }
     try { var s = await BQEBoard.api(fn("score")); renderScore(s.score); } catch (e) { showErr(e); }
     try { var k = await BQEBoard.api(fn("tickets")); renderTickets(k.tickets); } catch (e) { showErr(e); }
+    try { var w = await BQEBoard.api(fn("week")); renderWeek(w.week); } catch (e) { showErr(e); }
+  }
+  // ---- My last 7 days (2026-10-30): their own saved days, same columns as My scorecard, plus the average ----
+  function wkGrade(s) { return s >= 85 ? "good" : (s >= 65 ? "" : (s >= 45 ? "warmn" : "hot")); }
+  function wkDur(sec) { if (sec == null) return "–"; sec = Math.round(sec); return Math.floor(sec / 3600) + ":" + String(Math.floor(sec % 3600 / 60)).padStart(2, "0"); }
+  function wkN(v, d) { return v == null ? "–" : (+v).toFixed(d == null ? 1 : d); }
+  function wkAvg(list, f) { var v = list.map(f).filter(function (x) { return x != null && isFinite(x); }); return v.length ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : null; }
+  function renderWeek(w) {
+    var days = (w && w.days) || [];
+    if (!days.length) { $("week").className = "muted"; $("week").textContent = "No saved days yet."; return; }
+    var email = days.some(function (d) { return d.email; });
+    function cells(o) {
+      var s = o.s || {};
+      var tk = s.tkDue ? Math.round(s.tkLate / s.tkDue * 100) : null;
+      return "<td class='num'><b class='" + wkGrade(o.score) + "'>" + Math.round(o.score) + "</b></td>" +
+        "<td class='num'>" + (email ? "–" : wkN(s.inb, o.avg ? 1 : 0) + "/" + wkN(s.out, o.avg ? 1 : 0) + "/" + wkN(s.fol, o.avg ? 1 : 0)) + "</td>" +
+        "<td class='num'>" + wkN(s.took, o.avg ? 1 : 0) + "/" + wkN(s.efol, o.avg ? 1 : 0) + "</td>" +
+        "<td class='num'>" + wkN(s.tph) + "</td>" +
+        "<td class='num'>" + (email ? "–" : wkDur(s.talk)) + "</td>" +
+        "<td class='num'>" + (email ? (s.slowMin != null ? wkN(s.slowMin, 0) + " min" : "–") : wkN(s.rna, o.avg ? 1 : 0)) + "</td>" +
+        "<td class='num'>" + (s.ready == null ? "–" : Math.round(s.ready * 100) + "%") + "</td>" +
+        "<td class='num'>" + (s.lateMin == null ? "–" : (o.avg ? (s.lateMin ? s.lateMin + " late" : "ok") : (s.lateMin ? Math.round(s.lateMin) + " min late" : "ok"))) + "</td>" +
+        "<td class='num'>" + (s.lunchOver == null ? "–" : (o.avg ? (s.lunchOver ? s.lunchOver + " over" : "ok") : (s.lunchOver ? "+" + s.lunchOver + "m" : "ok"))) + "</td>" +
+        "<td class='num'>" + (tk == null ? "–" : s.tkLate + " late of " + s.tkDue) + "</td>" +
+        "<td class='num'>" + (s.es == null ? "–" : (s.es * 100).toFixed(1) + "%") + "</td>" +
+        "<td class='num'>" + (s.csat == null ? "–" : Math.round(s.csat * 100) + "%") + "</td>" +
+        "<td class='num'>" + wkDur(s.login) + "</td>";
+    }
+    var withS = days.filter(function (d) { return d.s; });
+    var avg = { avg: true, score: wkAvg(days, function (d) { return d.score; }), s: {
+      inb: wkAvg(withS, function (d) { return d.s.inb; }), out: wkAvg(withS, function (d) { return d.s.out; }), fol: wkAvg(withS, function (d) { return d.s.fol; }),
+      took: wkAvg(withS, function (d) { return d.s.took; }), efol: wkAvg(withS, function (d) { return d.s.efol; }), tph: wkAvg(withS, function (d) { return d.s.tph; }),
+      talk: wkAvg(withS, function (d) { return d.s.talk; }), rna: wkAvg(withS, function (d) { return d.s.rna; }), slowMin: wkAvg(withS, function (d) { return d.s.slowMin; }),
+      ready: wkAvg(withS, function (d) { return d.s.ready; }),
+      lateMin: withS.length ? withS.filter(function (d) { return d.s.lateMin; }).length : null, lunchOver: withS.length ? withS.filter(function (d) { return d.s.lunchOver; }).length : null,
+      tkLate: withS.reduce(function (a, d) { return a + (d.s.tkLate || 0); }, 0), tkDue: withS.reduce(function (a, d) { return a + (d.s.tkDue || 0); }, 0),
+      es: withS.length ? withS[withS.length - 1].s.es : null, csat: withS.length ? withS[withS.length - 1].s.csat : null,
+      login: wkAvg(withS, function (d) { return d.s.login; }) } };
+    $("week").className = "";
+    $("week").innerHTML = "<div style='overflow-x:auto'><table><thead><tr><th>Day</th><th class='num'>Score</th><th class='num'>In/Out/Fol</th><th class='num'>Email/Fol</th><th class='num'>Tickets/hr</th>" +
+      "<th class='num'>Talk</th><th class='num'>" + (email ? "Slow pickup" : "RNA") + "</th><th class='num'>Ready</th><th class='num'>Start</th><th class='num'>Lunch</th><th class='num'>Tickets</th>" +
+      "<th class='num'>ES 30d</th><th class='num'>CSAT 60d</th><th class='num'>Logged in</th></tr></thead><tbody>" +
+      days.slice().reverse().map(function (d) { return "<tr><td>" + esc(ymdLabel(d.day)) + "</td>" + cells(d) + "</tr>"; }).join("") +
+      (days.length > 1 ? "<tr><td><b>Average</b></td>" + cells(avg) + "</tr>" : "") + "</tbody></table></div>";
   }
   // ---- My scorecard (back 2026-10-30): their own row of the supervisors' Performance today, same columns and colors,
   // no rank. Hover a cell for its basic calculation; the score's breakdown shows on one line under the table.
