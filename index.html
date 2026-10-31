@@ -180,7 +180,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     </div>
   </div>
 
-  <footer>BQE Software · Internal · Version 1.3</footer>
+  <footer>BQE Software · Internal · Version 1.4</footer>
 </div>
 
 <script>
@@ -430,8 +430,16 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
   function wkN(v, d) { return v == null ? "–" : (+v).toFixed(d == null ? 1 : d); }
   function wkAvg(list, f) { var v = list.map(f).filter(function (x) { return x != null && isFinite(x); }); return v.length ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : null; }
   function renderWeek(w) {
-    var days = (w && w.days) || [];
-    if (!days.length) { $("week").className = "muted"; $("week").textContent = "No saved days yet."; return; }
+    var days = (w && w.days) || [], pto = (w && w.pto) || [];
+    // Time off in the window (2026-10-30): a weekday with no saved scores that falls in their PTO shows as a PTO row.
+    function ptoOn(y) { return pto.filter(function (x) { return x[0] <= y && x[1] >= y; })[0] || null; }
+    var have = {}; days.forEach(function (d) { have[d.day] = 1; });
+    var off = [];
+    if (w && w.from && w.to) for (var y = w.from; y <= w.to; y = new Date(Date.parse(y + "T12:00:00Z") + 86400000).toISOString().slice(0, 10)) {
+      var wd = new Date(y + "T12:00:00Z").getUTCDay();
+      if (wd >= 1 && wd <= 5 && !have[y] && ptoOn(y)) off.push({ day: y, pto: ptoOn(y) });
+    }
+    if (!days.length && !off.length) { $("week").className = "muted"; $("week").textContent = "No saved days yet."; return; }
     var email = days.some(function (d) { return d.email; });
     function cells(o) {
       var s = o.s || {};
@@ -464,7 +472,12 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     $("week").innerHTML = "<div style='overflow-x:auto'><table><thead><tr><th>Day</th><th class='num'>Score</th><th class='num'>In/Out/Fol</th><th class='num'>Email/Fol</th><th class='num'>Tickets/hr</th>" +
       "<th class='num'>Talk</th><th class='num'>" + (email ? "Slow pickup" : "RNA") + "</th><th class='num'>Ready</th><th class='num'>Start</th><th class='num'>Lunch</th><th class='num'>Tickets</th>" +
       "<th class='num'>ES 30d</th><th class='num'>CSAT 60d</th><th class='num'>Logged in</th></tr></thead><tbody>" +
-      days.slice().reverse().map(function (d) { return "<tr><td>" + esc(ymdLabel(d.day)) + "</td>" + cells(d) + "</tr>"; }).join("") +
+      days.map(function (d) {
+        var o = ptoOn(d.day);   // part of the day off (hours) on a day they also worked
+        return { day: d.day, html: "<tr><td>" + esc(ymdLabel(d.day)) + (o ? " <span class='muted'>(" + esc(o[2]) + (o[3] ? " " + esc(o[3]) : "") + ")</span>" : "") + "</td>" + cells(d) + "</tr>" };
+      }).concat(off.map(function (x) {
+        return { day: x.day, html: "<tr><td>" + esc(ymdLabel(x.day)) + "</td><td colspan='13' class='muted'>" + esc(x.pto[2] || "PTO") + (x.pto[3] ? " (" + esc(x.pto[3]) + ")" : "") + "</td></tr>" };
+      })).sort(function (a, b) { return a.day < b.day ? 1 : -1; }).map(function (r) { return r.html; }).join("") +
       (days.length > 1 ? "<tr><td><b>Average</b></td>" + cells(avg) + "</tr>" : "") + "</tbody></table></div>";
   }
   // ---- My scorecard (back 2026-10-30): their own row of the supervisors' Performance today, same columns and colors,
