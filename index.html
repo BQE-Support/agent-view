@@ -162,10 +162,11 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
       <div class="section-title"><span id="agentsTitle">Agents in my queues</span> <span id="filterTag"></span></div>
       <div class="panel"><div id="agents" class="muted">Loading…</div></div>
 
+      <div class="section-title">My scorecard <span class="sub" id="scoreAsOf"></span></div>
+      <div class="panel"><div id="score" class="muted">Loading…</div></div>
+
       <div class="section-title">Tickets waiting on me <span class="sub" id="tkSub"></span></div>
-      <div class="panel"><div id="tickets" class="muted">Loading…</div>
-        <div class="tiny muted" style="margin-top:6px">Zendesk tickets assigned to you that are Open, or On Hold with no due date (or a due date that has passed), and ES tickets in Awaiting info or Resolved to L1. Each one is due by the end of your next shift after it started waiting on you. An ES ticket you commented on or moved in Jira that day isn't late. Checked every 10 minutes.</div>
-      </div>
+      <div class="panel"><div id="tickets" class="muted">Loading…</div></div>
 
       <details class="collapsible">
         <summary class="section-title">My day <span class="sub">every status since your first login today</span></summary>
@@ -177,7 +178,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     </div>
   </div>
 
-  <footer>BQE Software · Internal · Version 0.9 Beta</footer>
+  <footer>BQE Software · Internal · Version 1.0 Beta</footer>
 </div>
 
 <script>
@@ -417,7 +418,21 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
   }
   async function pollDay() {
     try { var j = await BQEBoard.api(fn("day")); state.day = j.day; renderDay(); } catch (e) { showErr(e); }
+    try { var s = await BQEBoard.api(fn("score")); renderScore(s.score); } catch (e) { showErr(e); }
     try { var k = await BQEBoard.api(fn("tickets")); renderTickets(k.tickets); } catch (e) { showErr(e); }
+  }
+  // ---- My scorecard (back 2026-10-30): their own row of the supervisors' Performance today, same columns and colors,
+  // no rank. Hover a cell for its basic calculation; the score's breakdown shows on one line under the table.
+  function renderScore(sc) {
+    $("scoreAsOf").textContent = sc && sc.asOf ? "as of " + clock(sc.asOf) : "";
+    if (!sc || !sc.cells) { $("score").className = "muted"; $("score").textContent = "Not scored yet today."; return; }
+    $("score").className = "";
+    $("score").innerHTML = "<div style='overflow-x:auto'><table><thead><tr>" + sc.cols.map(function (c) { return "<th class='num'>" + esc(c) + "</th>"; }).join("") +
+      "</tr></thead><tbody><tr>" + sc.cells.map(function (c) {
+        return "<td class='num'" + (c.tip ? " title='" + esc(c.tip) + "'" : "") + ">" + (c.s || []).map(function (x) {
+          return x.c ? "<span class='" + esc(x.c) + "'>" + esc(x.t) + "</span>" : esc(x.t);
+        }).join("") + "</td>";
+      }).join("") + "</tr></tbody></table></div>" + (sc.cells[0] && sc.cells[0].tip ? "<div class='tiny muted' style='margin-top:6px'>" + esc(sc.cells[0].tip) + "</div>" : "");
   }
   // ---- Tickets waiting on me (2026-10-30; replaces My scorecard for now): the same list supervisors open from the
   // Tickets cell, as their board last saved it. Rows: [src, id, state, waiting since, deadline, result, subject].
