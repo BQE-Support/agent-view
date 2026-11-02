@@ -182,7 +182,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     </div>
   </div>
 
-  <footer>BQE Software · Internal · Version 1.8</footer>
+  <footer>BQE Software · Internal · Version 1.9</footer>
 </div>
 
 <script>
@@ -232,7 +232,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     if (d.viewer.previewOf) { $("preview").hidden = false; $("preview").textContent = "Admin preview: showing the board as agent " + d.viewer.previewOf + (me.name ? " (" + me.name + ")" : "") + "."; }
     $("app").classList.toggle("ringex", !!d.viewer.ringex);
     $("eyebrow").textContent = d.viewer.ringex ? "BQE Support" : "BQE Support · RingCX";
-    document.querySelectorAll("[data-team]").forEach(function (el) { el.textContent = d.viewer.ringex ? "Email Team" : "your queues"; });
+    document.querySelectorAll("[data-team]").forEach(function (el) { el.textContent = d.viewer.ringex ? "phone and Email Team" : "your queues and Email Team"; });
     if (d.viewer.ringex) { renderLunch(d, me); renderPto(d); return; }
     var st = me.loggedIn ? statusOf(me.state, me.base) : statusOf(null, null);
     var tiles = [
