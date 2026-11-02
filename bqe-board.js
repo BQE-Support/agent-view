@@ -11,6 +11,9 @@
  *      People with no RingCX agent (RingEX only) get in with their RingCentral token instead.
  *   4. Zendesk sign-in, for people with no RingCentral account (2026-11-02): BQEBoard.signIn("zendesk"). Zendesk
  *      sends back a code that dash-auth trades for the person's Zendesk user (the client secret stays on the server).
+ *   5. Email + password (Supabase Auth, 2026-11-02): BQEBoard.emailSignIn(email, password). An invitation or
+ *      "forgot password" email links back to the board with a one-time token; the board then calls
+ *      opts.onSetPassword({ email, type }) and BQEBoard.setPassword(newPassword) finishes the sign-in.
  * Steps 2 and 3 end with the "dash-auth" function, which checks the RingCX token and public.dash_access and
  * returns a signed 12-hour board session. RingCentral/RingCX tokens are never saved by this file.
  *
@@ -51,11 +54,11 @@
   function initialsOf(n) { return String(n || "").split(/\s+/).filter(Boolean).map(function (p) { return p[0]; }).slice(0, 2).join("").toUpperCase(); }
   function usable(s) { return s && s.token && s.exp > Date.now() + 60000 && s.boards && s.boards[opts.board]; }
 
-  // RingCX access token (or a Zendesk sign-in code) -> board session (dash-auth checks it and the access table).
-  async function exchange(rcxAccess, zendesk) {
-    var r = await fetch(CONFIG.SUPABASE_URL + "/functions/v1/dash-auth", zendesk ? {
+  // RingCX access token (or a body: Zendesk code, Supabase Auth token) -> board session (dash-auth checks it and the access table).
+  async function exchange(rcxAccess, body) {
+    var r = await fetch(CONFIG.SUPABASE_URL + "/functions/v1/dash-auth", body ? {
       method: "POST", headers: { apikey: CONFIG.SUPABASE_ANON_KEY, "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "zendesk", code: zendesk.code, redirectUri: CONFIG.REDIRECT_URI })
+      body: JSON.stringify(Object.assign({ redirectUri: CONFIG.REDIRECT_URI }, body))
     } : {
       method: "POST", headers: { apikey: CONFIG.SUPABASE_ANON_KEY, "x-rcx-token": rcxAccess }
     });
@@ -95,7 +98,7 @@
     var pk = null; try { pk = JSON.parse(sessionStorage.getItem(CONFIG.PKCE_KEY)); } catch (e) {}
     history.replaceState(null, "", CONFIG.REDIRECT_URI);
     if (!pk || pk.state !== state) throw new Error("Sign-in state mismatch. Please try again.");
-    if (pk.provider === "zendesk") { await exchange(null, { code: code }); return; }
+    if (pk.provider === "zendesk") { await exchange(null, { action: "zendesk", code: code }); return; }
     var r = await fetch(CONFIG.RC_SERVER + "/restapi/oauth/token", {
       method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: form({ grant_type: "authorization_code", code: code, redirect_uri: CONFIG.REDIRECT_URI, client_id: CONFIG.CLIENT_ID, code_verifier: pk.verifier })
@@ -112,6 +115,50 @@
     await exchange(agentOf(rcx) ? rcx : rc.access_token);
   }
 
+  // ---- Email + password (Supabase Auth). Supabase tokens are only passed on to dash-auth, never saved. ----
+  var AUTH = CONFIG.SUPABASE_URL + "/auth/v1", pendingPw = null;   // { token, type, email } from an emailed link
+  async function authCall(path, init, token) {
+    var h = { apikey: CONFIG.SUPABASE_ANON_KEY, "Content-Type": "application/json" };
+    if (token) h.Authorization = "Bearer " + token;
+    var r = await fetch(AUTH + path, Object.assign({ headers: h }, init));
+    var j = await r.json().catch(function () { return {}; });
+    if (!r.ok) throw new Error(j.error_description || j.msg || j.message || ("HTTP " + r.status));
+    return j;
+  }
+  async function emailSignIn(email, password) {
+    var j = await authCall("/token?grant_type=password", { method: "POST", body: JSON.stringify({ email: email, password: password }) })
+      .catch(function (e) { throw new Error(/invalid/i.test(e.message) ? "Wrong email or password." : e.message); });
+    await exchange(null, { action: "email", token: j.access_token });
+    ready();
+  }
+  async function emailReset(email) {
+    await authCall("/recover?redirect_to=" + encodeURIComponent(CONFIG.REDIRECT_URI), { method: "POST", body: JSON.stringify({ email: email }) });
+  }
+  async function setPassword(password) {
+    if (!pendingPw) throw new Error("This link has already been used. Ask for a new one with Forgot password.");
+    await authCall("/user", { method: "PUT", body: JSON.stringify({ password: password }) }, pendingPw.token);
+    var t = pendingPw.token; pendingPw = null;
+    await exchange(null, { action: "email", token: t });
+    ready();
+  }
+  // An invitation or reset link lands with #access_token=...&type=invite|recovery (or #error_description=...).
+  async function emailLinkInHash() {
+    if (!/access_token=|error_description=/.test(location.hash)) return false;
+    var h = new URLSearchParams(location.hash.slice(1));
+    history.replaceState(null, "", CONFIG.REDIRECT_URI);
+    if (h.get("error_description")) throw new Error(h.get("error_description").replace(/\+/g, " ") + ". Use Forgot password to get a new link.");
+    var token = h.get("access_token"), type = h.get("type") || "";
+    var u = await authCall("/user", { method: "GET" }, token);
+    if (type === "invite" || type === "recovery") {
+      pendingPw = { token: token, type: type, email: u.email };
+      if (opts.onSetPassword) opts.onSetPassword({ email: u.email, type: type });
+      return true;
+    }
+    await exchange(null, { action: "email", token: token });   // any other emailed link signs them straight in
+    ready();
+    return true;
+  }
+
   function ready() {
     if (!usable(session)) {
       var msg = session && session.boards && !session.boards[opts.board] ? "This board isn't shared with you. Ask your support lead for access." : "";
@@ -126,6 +173,7 @@
     try {
       var q = new URLSearchParams(location.search);
       if (q.get("code") && q.get("state")) { await finishSignIn(q.get("code"), q.get("state")); return ready(); }
+      if (await emailLinkInHash()) return;
       if (q.get("error")) { history.replaceState(null, "", CONFIG.REDIRECT_URI); throw new Error("Sign-in was cancelled (" + q.get("error") + ")."); }
       session = load(CONFIG.STORE_KEY);
       if (usable(session)) return ready();
@@ -288,5 +336,5 @@
     };
   }
 
-  window.BQEBoard = { start: start, signIn: signIn, signOut: signOut, api: api, presence: presence, arrange: arrange, initialsOf: initialsOf, config: CONFIG };
+  window.BQEBoard = { start: start, signIn: signIn, emailSignIn: emailSignIn, emailReset: emailReset, setPassword: setPassword, signOut: signOut, api: api, presence: presence, arrange: arrange, initialsOf: initialsOf, config: CONFIG };
 })();
