@@ -52,9 +52,8 @@ h1 { font: 600 28px/1.15 var(--serif); margin: 4px 0 0; }
 .kpi .note { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
 /* Layout: queues, lunch and time off pinned on the left (like the Supervisor view), everything else on the right */
 .layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 14px; align-items: start; }
-/* RingEX-only viewers (no RingCX agent): no queues, status or status list, so one column. */
+/* RingEX-only viewers (no RingCX agent): no queues, status or status list; Lunch and Time off cover their team. */
 .ringex .rcx-only { display: none !important; }
-.ringex .layout { grid-template-columns: minmax(0, 1fr); }
 .side { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; overflow-x: hidden; }
 .side .panel { margin-bottom: 12px; padding: 12px 14px; }
 .side .section-title { font-size: 16px; margin: 0 0 8px; }
@@ -144,17 +143,17 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
   <div class="err" id="err" hidden></div>
 
   <div class="layout">
-    <aside class="side rcx-only">
-      <div class="panel">
+    <aside class="side">
+      <div class="panel rcx-only">
         <div class="section-title">My queues <span class="sub">click one to filter</span></div>
         <div id="queueList" class="tiny muted">Loading…</div>
       </div>
       <div class="panel">
-        <div class="section-title">Lunch <span class="sub">your queues</span></div>
+        <div class="section-title">Lunch <span class="sub" data-team>your queues</span></div>
         <div id="lunchList" class="tiny muted">Loading…</div>
       </div>
       <div class="panel">
-        <div class="section-title">Time off <span class="sub">your queues, next 7 days</span></div>
+        <div class="section-title">Time off <span class="sub"><span data-team>your queues</span>, next 7 days</span></div>
         <div id="ptoList" class="tiny muted">Loading…</div>
       </div>
     </aside>
@@ -183,7 +182,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     </div>
   </div>
 
-  <footer>BQE Software · Internal · Version 1.7</footer>
+  <footer>BQE Software · Internal · Version 1.8</footer>
 </div>
 
 <script>
@@ -233,7 +232,8 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     if (d.viewer.previewOf) { $("preview").hidden = false; $("preview").textContent = "Admin preview: showing the board as agent " + d.viewer.previewOf + (me.name ? " (" + me.name + ")" : "") + "."; }
     $("app").classList.toggle("ringex", !!d.viewer.ringex);
     $("eyebrow").textContent = d.viewer.ringex ? "BQE Support" : "BQE Support · RingCX";
-    if (d.viewer.ringex) return;
+    document.querySelectorAll("[data-team]").forEach(function (el) { el.textContent = d.viewer.ringex ? "Email Team" : "your queues"; });
+    if (d.viewer.ringex) { renderLunch(d, me); renderPto(d); return; }
     var st = me.loggedIn ? statusOf(me.state, me.base) : statusOf(null, null);
     var tiles = [
       { label: "My status", value: "<span class='dot " + st.cls + "'></span>" + esc(st.label), note: me.loggedIn ? "for " + dur(me.stateSec + ago()) : "Not logged in to RingCX",
