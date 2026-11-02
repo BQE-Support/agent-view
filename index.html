@@ -201,7 +201,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     </div>
   </div>
 
-  <footer>BQE Software · Internal · Version 1.15</footer>
+  <footer>BQE Software · Internal · Version 1.16</footer>
 </div>
 
 <script>
@@ -465,6 +465,19 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
   function wkDur(sec) { if (sec == null) return "–"; sec = Math.round(sec); return Math.floor(sec / 3600) + ":" + String(Math.floor(sec % 3600 / 60)).padStart(2, "0"); }
   function wkN(v, d) { return v == null ? "–" : (+v).toFixed(d == null ? 1 : d); }
   function wkAvg(list, f) { var v = list.map(f).filter(function (x) { return x != null && isFinite(x); }); return v.length ? v.reduce(function (a, b) { return a + b; }, 0) / v.length : null; }
+  // Exact times on hover for Start and Lunch (2026-11-02). Saved as PT minutes of the day; days saved before then have none.
+  function wkClock(m) { return clockOf(((Math.round(m) % 1440) + 1440) % 1440); }
+  function wkTip(t) { return t ? " title='" + esc(t) + "' style='cursor:help'" : ""; }
+  function startTip(s) {
+    if (s.firstMin == null) return s.lateMin == null ? "" : "Exact time not saved for this day.";
+    return "First login " + wkClock(s.firstMin) + " PT" + (s.startMin == null ? " (no scheduled start that day)" : " · scheduled start " + wkClock(s.startMin) + " PT") + ".";
+  }
+  function lunchTip(s) {
+    if (s.lunchFrom == null) return s.lunchOver == null ? "" : (s.firstMin == null ? "Exact time not saved for this day." : "No lunch seen that day.");
+    if (s.lunchTo == null) return "Lunch from " + wkClock(s.lunchFrom) + " PT (end not seen).";
+    var d = ((s.lunchTo - s.lunchFrom) % 1440 + 1440) % 1440;
+    return "Lunch " + wkClock(s.lunchFrom) + " to " + wkClock(s.lunchTo) + " PT (" + d + " min).";
+  }
   function renderWeek(w) {
     var days = (w && w.days) || [], pto = (w && w.pto) || [];
     // Time off in the window (2026-10-30): a weekday with no saved scores that falls in their PTO shows as a PTO row.
@@ -487,8 +500,8 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
         "<td class='num'>" + (email ? "–" : wkDur(s.talk)) + "</td>" +
         "<td class='num'>" + (email ? (s.slowMin != null ? wkN(s.slowMin, 0) + " min" : "–") : wkN(s.rna, o.avg ? 1 : 0)) + "</td>" +
         "<td class='num'>" + (s.ready == null ? "–" : Math.round(s.ready * 100) + "%") + "</td>" +
-        "<td class='num'>" + (s.lateMin == null ? "–" : (o.avg ? (s.lateMin ? s.lateMin + " late" : "ok") : (s.lateMin ? Math.round(s.lateMin) + " min late" : "ok"))) + "</td>" +
-        "<td class='num'>" + (s.lunchOver == null ? "–" : (o.avg ? (s.lunchOver ? s.lunchOver + " over" : "ok") : (s.lunchOver ? "+" + s.lunchOver + "m" : "ok"))) + "</td>" +
+        "<td class='num'" + wkTip(o.avg ? "" : startTip(s)) + ">" + (s.lateMin == null ? "–" : (o.avg ? (s.lateMin ? s.lateMin + " late" : "ok") : (s.lateMin ? Math.round(s.lateMin) + " min late" : "ok"))) + "</td>" +
+        "<td class='num'" + wkTip(o.avg ? "" : lunchTip(s)) + ">" + (s.lunchOver == null ? "–" : (o.avg ? (s.lunchOver ? s.lunchOver + " over" : "ok") : (s.lunchOver ? "+" + s.lunchOver + "m" : "ok"))) + "</td>" +
         "<td class='num'>" + (tk == null ? "–" : s.tkLate + " late of " + s.tkDue) + "</td>" +
         "<td class='num'>" + (s.es == null ? "–" : (s.es * 100).toFixed(1) + "%") + "</td>" +
         "<td class='num'>" + (s.csat == null ? "–" : Math.round(s.csat * 100) + "%") + "</td>" +
