@@ -41,6 +41,9 @@
   function jwtExp(t) {
     try { var p = String(t).split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); return (JSON.parse(atob(p + "===".slice((p.length + 3) % 4))).exp || 0) * 1000; } catch (e) { return 0; }
   }
+  function agentOf(t) {
+    try { var p = String(t).split(".")[1].replace(/-/g, "+").replace(/_/g, "/"); return String(JSON.parse(atob(p + "===".slice((p.length + 3) % 4))).agnt || ""); } catch (e) { return ""; }
+  }
   function initialsOf(n) { return String(n || "").split(/\s+/).filter(Boolean).map(function (p) { return p[0]; }).slice(0, 2).join("").toUpperCase(); }
   function usable(s) { return s && s.token && s.exp > Date.now() + 60000 && s.boards && s.boards[opts.board]; }
 
@@ -88,7 +91,9 @@
       body: form({ rcAccessToken: rc.access_token, rcTokenType: "Bearer" })
     });
     // RingEX-only users (no RingCX agent) sign in with their RingCentral token; dash-auth tells the two apart.
-    await exchange(x.ok ? (await x.json()).accessToken : rc.access_token);
+    // RingCX can accept them and still return a token with no agent in it, so check for the agent ID too.
+    var rcx = x.ok ? ((await x.json().catch(function () { return {}; })).accessToken || "") : "";
+    await exchange(agentOf(rcx) ? rcx : rc.access_token);
   }
 
   function ready() {
