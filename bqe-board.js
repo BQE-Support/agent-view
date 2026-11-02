@@ -9,6 +9,8 @@
  *   3. RingCentral sign-in (PKCE, same RingCentral app as the Live View). The board's address must be on the
  *      app's redirect list. Local testing on localhost uses the dev server's /dev-token instead.
  *      People with no RingCX agent (RingEX only) get in with their RingCentral token instead.
+ *   4. Zendesk sign-in, for people with no RingCentral account (2026-11-02): BQEBoard.signIn("zendesk"). Zendesk
+ *      sends back a code that dash-auth trades for the person's Zendesk user (the client secret stays on the server).
  * Steps 2 and 3 end with the "dash-auth" function, which checks the RingCX token and public.dash_access and
  * returns a signed 12-hour board session. RingCentral/RingCX tokens are never saved by this file.
  *
@@ -29,7 +31,9 @@
     REDIRECT_URI: location.origin + location.pathname.replace(/index\.html$/, ""),
     STORE_KEY: "bqeBoards.session.v1",
     LIVE_VIEW_KEY: "rcxLiveView.session.v1",   // read only, never written
-    PKCE_KEY: "bqeBoards.pkce.v1"
+    PKCE_KEY: "bqeBoards.pkce.v1",
+    ZD_SERVER: "https://bqe.zendesk.com",
+    ZD_CLIENT_ID: "bqe_support_boards"    // Zendesk OAuth client (public identifier)
   };
   var IS_LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   var opts = {}, session = null, pres = { client: null, channel: null, cb: null };
@@ -47,9 +51,12 @@
   function initialsOf(n) { return String(n || "").split(/\s+/).filter(Boolean).map(function (p) { return p[0]; }).slice(0, 2).join("").toUpperCase(); }
   function usable(s) { return s && s.token && s.exp > Date.now() + 60000 && s.boards && s.boards[opts.board]; }
 
-  // RingCX access token -> board session (dash-auth checks it and the access table).
-  async function exchange(rcxAccess) {
-    var r = await fetch(CONFIG.SUPABASE_URL + "/functions/v1/dash-auth", {
+  // RingCX access token (or a Zendesk sign-in code) -> board session (dash-auth checks it and the access table).
+  async function exchange(rcxAccess, zendesk) {
+    var r = await fetch(CONFIG.SUPABASE_URL + "/functions/v1/dash-auth", zendesk ? {
+      method: "POST", headers: { apikey: CONFIG.SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "zendesk", code: zendesk.code, redirectUri: CONFIG.REDIRECT_URI })
+    } : {
       method: "POST", headers: { apikey: CONFIG.SUPABASE_ANON_KEY, "x-rcx-token": rcxAccess }
     });
     var j = await r.json().catch(function () { return {}; });
@@ -59,7 +66,15 @@
     return session;
   }
 
-  async function signIn() {
+  async function signIn(provider) {
+    if (provider === "zendesk") {
+      var zs = b64url(crypto.getRandomValues(new Uint8Array(16)));
+      try { sessionStorage.setItem(CONFIG.PKCE_KEY, JSON.stringify({ state: zs, provider: "zendesk" })); } catch (e) {}
+      location.href = CONFIG.ZD_SERVER + "/oauth/authorizations/new?" + form({
+        response_type: "code", client_id: CONFIG.ZD_CLIENT_ID, redirect_uri: CONFIG.REDIRECT_URI, scope: "read", state: zs
+      });
+      return;
+    }
     if (IS_LOCAL) {   // local testing: the dev server mints a RingCX token from the admin credential
       var d = await fetch("/dev-token");
       if (!d.ok) throw new Error("Dev token endpoint failed: HTTP " + d.status);
@@ -80,6 +95,7 @@
     var pk = null; try { pk = JSON.parse(sessionStorage.getItem(CONFIG.PKCE_KEY)); } catch (e) {}
     history.replaceState(null, "", CONFIG.REDIRECT_URI);
     if (!pk || pk.state !== state) throw new Error("Sign-in state mismatch. Please try again.");
+    if (pk.provider === "zendesk") { await exchange(null, { code: code }); return; }
     var r = await fetch(CONFIG.RC_SERVER + "/restapi/oauth/token", {
       method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: form({ grant_type: "authorization_code", code: code, redirect_uri: CONFIG.REDIRECT_URI, client_id: CONFIG.CLIENT_ID, code_verifier: pk.verifier })
@@ -110,7 +126,7 @@
     try {
       var q = new URLSearchParams(location.search);
       if (q.get("code") && q.get("state")) { await finishSignIn(q.get("code"), q.get("state")); return ready(); }
-      if (q.get("error")) { history.replaceState(null, "", CONFIG.REDIRECT_URI); throw new Error("RingCentral sign-in was cancelled (" + q.get("error") + ")."); }
+      if (q.get("error")) { history.replaceState(null, "", CONFIG.REDIRECT_URI); throw new Error("Sign-in was cancelled (" + q.get("error") + ")."); }
       session = load(CONFIG.STORE_KEY);
       if (usable(session)) return ready();
       var live = load(CONFIG.LIVE_VIEW_KEY);

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>My Workday</title>
-<script src="bqe-board.js?v=1.10"></script>
+<script src="bqe-board.js?v=1.13"></script>
 <style>
 :root {
   --bg: #F5F6F9; --surface: #FFFFFF; --surface-alt: #ECEFF5; --border: #DDE1EA;
@@ -128,6 +128,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
   <h1>My Workday</h1>
   <p>Your queues, your status and your day. Sign in with your RingCentral account.</p>
   <button type="button" class="primary-btn" id="signInBtn">Sign in with RingCentral</button>
+  <p class="tiny"><a href="#" id="signInZdBtn">No RingCentral account? Sign in with Zendesk</a></p>
   <div class="msg" id="signinMsg"></div>
 </div>
 
@@ -182,7 +183,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     </div>
   </div>
 
-  <footer>BQE Software · Internal · Version 1.12</footer>
+  <footer>BQE Software · Internal · Version 1.13</footer>
 </div>
 
 <script>
@@ -548,6 +549,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
 
   function showSignin(msg) { stopPolling(); $("app").hidden = true; $("signin").hidden = false; $("signinMsg").textContent = msg || ""; }
   $("signInBtn").addEventListener("click", function () { $("signinMsg").textContent = ""; BQEBoard.signIn().catch(function (e) { showSignin(e.message); }); });
+  $("signInZdBtn").addEventListener("click", function (e) { e.preventDefault(); $("signinMsg").textContent = ""; BQEBoard.signIn("zendesk").catch(function (x) { showSignin(x.message); }); });
   $("signOutBtn").addEventListener("click", function () { BQEBoard.signOut(); });
   BQEBoard.start({
     board: "agent-view",
