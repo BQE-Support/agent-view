@@ -8,6 +8,7 @@
  *   2. the RingCX Live View's own saved sign-in, if its RingCX token is still good (no new sign-in needed);
  *   3. RingCentral sign-in (PKCE, same RingCentral app as the Live View). The board's address must be on the
  *      app's redirect list. Local testing on localhost uses the dev server's /dev-token instead.
+ *      People with no RingCX agent (RingEX only) get in with their RingCentral token instead.
  * Steps 2 and 3 end with the "dash-auth" function, which checks the RingCX token and public.dash_access and
  * returns a signed 12-hour board session. RingCentral/RingCX tokens are never saved by this file.
  *
@@ -86,8 +87,8 @@
       method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: form({ rcAccessToken: rc.access_token, rcTokenType: "Bearer" })
     });
-    if (!x.ok) throw new Error("RingCentral sign-in worked, but RingCX refused it (HTTP " + x.status + "). Your RingCentral user may not have a RingCX account.");
-    await exchange((await x.json()).accessToken);
+    // RingEX-only users (no RingCX agent) sign in with their RingCentral token; dash-auth tells the two apart.
+    await exchange(x.ok ? (await x.json()).accessToken : rc.access_token);
   }
 
   function ready() {

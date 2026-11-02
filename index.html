@@ -52,6 +52,9 @@ h1 { font: 600 28px/1.15 var(--serif); margin: 4px 0 0; }
 .kpi .note { font-size: 11.5px; color: var(--ink-3); margin-top: 2px; }
 /* Layout: queues, lunch and time off pinned on the left (like the Supervisor view), everything else on the right */
 .layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 14px; align-items: start; }
+/* RingEX-only viewers (no RingCX agent): no queues, status or status list, so one column. */
+.ringex .rcx-only { display: none !important; }
+.ringex .layout { grid-template-columns: minmax(0, 1fr); }
 .side { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow-y: auto; overflow-x: hidden; }
 .side .panel { margin-bottom: 12px; padding: 12px 14px; }
 .side .section-title { font-size: 16px; margin: 0 0 8px; }
@@ -124,7 +127,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
 <div class="signin" id="signin" hidden>
   <div class="eyebrow">BQE Support</div>
   <h1>My Workday</h1>
-  <p>Your queues, your status and your day. Sign in with the same RingCentral account you use for RingCX.</p>
+  <p>Your queues, your status and your day. Sign in with your RingCentral account.</p>
   <button type="button" class="primary-btn" id="signInBtn">Sign in with RingCentral</button>
   <div class="msg" id="signinMsg"></div>
 </div>
@@ -132,7 +135,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
 <div class="wrap" id="app" hidden>
   <div class="masthead">
     <div>
-      <div class="eyebrow">BQE Support · RingCX</div>
+      <div class="eyebrow" id="eyebrow">BQE Support · RingCX</div>
       <h1>My Workday</h1>
     </div>
     <div class="who"><span id="whoName"></span><span class="muted tiny" id="asOf"></span><button type="button" id="signOutBtn">Sign out</button></div>
@@ -141,7 +144,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
   <div class="err" id="err" hidden></div>
 
   <div class="layout">
-    <aside class="side">
+    <aside class="side rcx-only">
       <div class="panel">
         <div class="section-title">My queues <span class="sub">click one to filter</span></div>
         <div id="queueList" class="tiny muted">Loading…</div>
@@ -157,20 +160,20 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     </aside>
 
     <div class="content">
-      <div class="kpi-grid" id="kpis"></div>
+      <div class="kpi-grid rcx-only" id="kpis"></div>
 
       <div class="section-title">My scorecard <span class="sub" id="scoreAsOf"></span></div>
       <div class="panel"><div id="score" class="muted">Loading…</div></div>
 
-      <div class="section-title"><span id="agentsTitle">Agents in my queues</span> <span id="filterTag"></span></div>
-      <div class="panel"><div id="agents" class="muted">Loading…</div></div>
+      <div class="section-title rcx-only"><span id="agentsTitle">Agents in my queues</span> <span id="filterTag"></span></div>
+      <div class="panel rcx-only"><div id="agents" class="muted">Loading…</div></div>
 
       <details class="collapsible" open>
         <summary class="section-title">Tickets waiting on me <span class="sub" id="tkSub"></span></summary>
         <div class="panel"><div id="tickets" class="muted">Loading…</div></div>
       </details>
 
-      <details class="collapsible">
+      <details class="collapsible rcx-only">
         <summary class="section-title">My Statuses <span class="sub">every status since your first login today</span></summary>
         <div class="panel"><div id="day" class="muted">Loading…</div></div>
       </details>
@@ -180,7 +183,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     </div>
   </div>
 
-  <footer>BQE Software · Internal · Version 1.6</footer>
+  <footer>BQE Software · Internal · Version 1.7</footer>
 </div>
 
 <script>
@@ -228,6 +231,9 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     $("whoName").textContent = d.viewer.name;
     $("asOf").textContent = d.ts ? "Updated " + clock(d.ts) : "";
     if (d.viewer.previewOf) { $("preview").hidden = false; $("preview").textContent = "Admin preview: showing the board as agent " + d.viewer.previewOf + (me.name ? " (" + me.name + ")" : "") + "."; }
+    $("app").classList.toggle("ringex", !!d.viewer.ringex);
+    $("eyebrow").textContent = d.viewer.ringex ? "BQE Support" : "BQE Support · RingCX";
+    if (d.viewer.ringex) return;
     var st = me.loggedIn ? statusOf(me.state, me.base) : statusOf(null, null);
     var tiles = [
       { label: "My status", value: "<span class='dot " + st.cls + "'></span>" + esc(st.label), note: me.loggedIn ? "for " + dur(me.stateSec + ago()) : "Not logged in to RingCX",
