@@ -191,6 +191,11 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
         <div class="panel"><div id="tickets" class="muted">Loading…</div></div>
       </details>
 
+      <details class="collapsible" open id="ptoCoverWrap" hidden>
+        <summary class="section-title">Tickets of teammates on PTO <span class="sub" id="ptoCoverSub"></span></summary>
+        <div class="panel"><div id="ptoCover" class="muted">Loading…</div></div>
+      </details>
+
       <details class="collapsible rcx-only">
         <summary class="section-title">My Statuses <span class="sub">every status since your first login today</span></summary>
         <div class="panel"><div id="day" class="muted">Loading…</div></div>
@@ -201,7 +206,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
     </div>
   </div>
 
-  <footer>BQE Software · Internal · Version 1.16</footer>
+  <footer>BQE Software · Internal · Version 1.17</footer>
 </div>
 
 <script>
@@ -450,7 +455,7 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
   }
   function showErr(e) { $("err").hidden = !e; $("err").textContent = e ? String(e.message || e) : ""; }
   async function poll() {
-    try { state.data = await BQEBoard.api(fn()); state.gotAt = Date.now(); showErr(null); render(); }
+    try { state.data = await BQEBoard.api(fn()); state.gotAt = Date.now(); showErr(null); render(); renderPtoCover(state.data.ptoCover); }
     catch (e) { showErr(e); }
   }
   async function pollDay() {
@@ -569,6 +574,33 @@ footer { text-align: center; color: var(--ink-3); font-size: 11.5px; margin-top:
         var res = r ? "<span class='" + r[0] + "'>" + esc(r[1]) + "</span>" : (x[5] === "due" ? "<span class='muted'>due " + esc(clock(dl)) + "</span>" : "");
         return "<tr><td><a href='" + (x[0] === "es" ? es : zd) + esc(x[1]) + "' target='_blank' rel='noopener'>" + (x[0] === "es" ? esc(x[1]) : "#" + esc(x[1])) + " ↗</a></td>" +
           "<td>" + esc(x[2]) + "</td><td>" + esc(whenLabel(x[3])) + "</td><td>" + esc(whenLabel(dl)) + "</td><td>" + res + "</td><td style='white-space:normal'>" + esc(x[6]) + "</td></tr>";
+      }).join("") + "</tbody></table></div>";
+  }
+  // ---- Tickets of teammates on PTO (2026-11-03; only for the people the agent-view function lists): tickets waiting on
+  // someone who is out today, as the supervisor board last saved them. Due by the end of the shift they'd have worked.
+  // Rows: [src, id, state, waiting since, due, result, subject, handled by].
+  var COVER_RESULT = { late: ["hot", "late, still waiting"], handled: ["good", "handled in time"], handledlate: ["warmn", "handled late"] };
+  function renderPtoCover(pc) {
+    $("ptoCoverWrap").hidden = !pc;
+    if (!pc) return;
+    var groups = pc.groups || [], all = groups.reduce(function (a, g) { return a.concat(g.rows || []); }, []);
+    var open = all.filter(function (x) { return x[5] === "due" || x[5] === "late"; }).length, late = all.filter(function (x) { return x[5] === "late"; }).length;
+    $("ptoCoverSub").textContent = groups.length + " out today · " + open + " still waiting" + (late ? " · " + late + " past due" : "") + (pc.asOf ? " · as of " + clock(pc.asOf) : "");
+    if (!pc.asOf) { $("ptoCover").className = "muted"; $("ptoCover").textContent = "Not loaded yet today. It fills in once a supervisor's board has checked the tickets."; return; }
+    if (!groups.length) { $("ptoCover").className = "muted"; $("ptoCover").textContent = "Nobody on your team is on PTO today."; return; }
+    var zd = "https://bqe.zendesk.com/agent/tickets/", es = "https://bqetrack.atlassian.net/browse/";
+    $("ptoCover").className = "";
+    $("ptoCover").innerHTML = "<div style='overflow-x:auto'><table><thead><tr><th>On PTO</th><th>Ticket</th><th>State</th><th>Waiting since</th><th>Due (end of their shift)</th><th>Result</th><th>Handled by</th><th>Subject</th></tr></thead><tbody>" +
+      groups.map(function (g) {
+        var who = "<b>" + esc(g.name) + "</b>" + (g.hours ? " <span class='tiny muted'>" + esc(g.hours) + "h</span>" : "");
+        if (!(g.rows || []).length) return "<tr><td>" + who + "</td><td colspan='7' class='muted'>Nothing waiting on them.</td></tr>";
+        return g.rows.map(function (x, i) {
+          var r = COVER_RESULT[x[5]];
+          var res = r ? "<span class='" + r[0] + "'>" + esc(r[1]) + "</span>" : "<span class='muted'>due " + esc(clock(x[4])) + "</span>";
+          return "<tr><td>" + (i ? "" : who) + "</td><td><a href='" + (x[0] === "es" ? es : zd) + esc(x[1]) + "' target='_blank' rel='noopener'>" + (x[0] === "es" ? esc(x[1]) : "#" + esc(x[1])) + " ↗</a></td>" +
+            "<td>" + esc(x[2]) + "</td><td>" + esc(whenLabel(x[3])) + "</td><td>" + esc(whenLabel(x[4])) + "</td><td>" + res + "</td>" +
+            "<td style='white-space:normal'>" + (x[7] ? esc(x[7]) : "<span class='muted'>–</span>") + "</td><td style='white-space:normal'>" + esc(x[6]) + "</td></tr>";
+        }).join("");
       }).join("") + "</tbody></table></div>";
   }
   function startPolling() {
