@@ -136,16 +136,30 @@
   }
   async function setPassword(password) {
     if (!pendingPw) throw new Error("This link has already been used. Ask for a new one with Forgot password.");
+    if (pendingPw.tokenHash) {
+      // The emailed code is only used here, when the person saves a password, so a mail scanner that opens the
+      // link can't use it up first (Sabreena's invite, 2026-11-02, was used 37 s after sending by Outlook's scanner).
+      var v = await authCall("/verify", { method: "POST", body: JSON.stringify({ type: pendingPw.type, token_hash: pendingPw.tokenHash }) })
+        .catch(function () { throw new Error("This link has expired or was already used. Use Forgot password to get a new one."); });
+      pendingPw.token = v.access_token; pendingPw.tokenHash = null;
+    }
     await authCall("/user", { method: "PUT", body: JSON.stringify({ password: password }) }, pendingPw.token);
     var t = pendingPw.token; pendingPw = null;
     await exchange(null, { action: "email", token: t });
     ready();
   }
   // An invitation or reset link lands with #access_token=...&type=invite|recovery (or #error_description=...).
+  // Since 2026-11-06 the invite and reset emails link with #token_hash=...&type=invite|recovery instead: nothing is
+  // used until the person saves a password (see setPassword), so link scanners can't spend it.
   async function emailLinkInHash() {
-    if (!/access_token=|error_description=/.test(location.hash)) return false;
+    if (!/access_token=|error_description=|token_hash=/.test(location.hash)) return false;
     var h = new URLSearchParams(location.hash.slice(1));
     history.replaceState(null, "", CONFIG.REDIRECT_URI);
+    if (h.get("token_hash") && (h.get("type") === "invite" || h.get("type") === "recovery")) {
+      pendingPw = { tokenHash: h.get("token_hash"), type: h.get("type"), email: "" };
+      if (opts.onSetPassword) opts.onSetPassword({ email: "", type: h.get("type") });
+      return true;
+    }
     if (h.get("error_description")) throw new Error(h.get("error_description").replace(/\+/g, " ") + ". Use Forgot password to get a new link.");
     var token = h.get("access_token"), type = h.get("type") || "";
     var u = await authCall("/user", { method: "GET" }, token);
